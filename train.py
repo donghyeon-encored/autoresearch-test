@@ -207,7 +207,7 @@ GRAD_CLIP = 1.0
 # Batching
 DEVICE_BATCH_SIZE = 16
 GRAD_ACCUM_STEPS = 1
-MASK_RATE = 0.3
+MASK_RATE = 0.25
 
 # Multi-task training loss weights (train-time only; eval composite weights are fixed
 # in prepare.py and cannot be changed here).
