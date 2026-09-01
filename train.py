@@ -174,6 +174,12 @@ class TinyMultiTaskBert(nn.Module):
         x = self._encode(input_ids, self._bidirectional_mask(attention_mask), segment_ids)
         return self.nsp_head(x[:, 0])
 
+    def forward_mlm_nsp(self, input_ids, attention_mask, segment_ids, selected):
+        """Training-only fusion: MLM + NSP logits from one bidirectional pass over the
+        same (corrupted) input, mirroring original BERT's shared MLM/NSP forward pass."""
+        x = self._encode(input_ids, self._bidirectional_mask(attention_mask), segment_ids)
+        return self._lm_head(x[selected]), self.nsp_head(x[:, 0])
+
 
 # ---------------------------------------------------------------------------
 # Hyperparameters (edit these directly, no CLI flags needed)
@@ -278,7 +284,7 @@ while time.time() - t_start_training < TIME_BUDGET:
     for group in optimizer.param_groups:
         group["lr"] = LEARNING_RATE * lr_multiplier
 
-    mlm_batches, lm_batches, nsp_batches = [], [], []
+    mlm_batches, lm_batches = [], []
     for _ in range(GRAD_ACCUM_STEPS):
         clean_ids = next_batch["input_ids"]
         segment_ids = next_batch["segment_ids"]
@@ -291,34 +297,26 @@ while time.time() - t_start_training < TIME_BUDGET:
                 "selected": masked["selected"],
                 "targets": masked["targets"],
                 "segment_ids": segment_ids,
+                "is_next": next_batch["is_next"],
             }
         )
         lm_batches.append(
             {"input_ids": clean_ids, "attention_mask": attn_mask, "segment_ids": segment_ids}
         )
-        nsp_batches.append(
-            {
-                "input_ids": clean_ids,
-                "attention_mask": attn_mask,
-                "segment_ids": segment_ids,
-                "is_next": next_batch["is_next"],
-            }
-        )
         next_batch = next(train_loader)
 
     n_mlm = sum(int(b["selected"].sum()) for b in mlm_batches)
     n_lm = sum(int(b["attention_mask"][:, 1:].sum()) for b in lm_batches)
-    n_nsp = sum(b["is_next"].numel() for b in nsp_batches)
+    n_nsp = sum(b["is_next"].numel() for b in mlm_batches)
 
     optimizer.zero_grad(set_to_none=True)
     step_loss = 0.0
-    for mlm_b, lm_b, nsp_b in zip(mlm_batches, lm_batches, nsp_batches):
+    for mlm_b, lm_b in zip(mlm_batches, lm_batches):
         tokens += int(mlm_b["attention_mask"].sum())
         mlm_b = {k: v.to(device) for k, v in mlm_b.items()}
         lm_b = {k: v.to(device) for k, v in lm_b.items()}
-        nsp_b = {k: v.to(device) for k, v in nsp_b.items()}
 
-        mlm_logits = model.forward_mlm(
+        mlm_logits, nsp_logits = model.forward_mlm_nsp(
             mlm_b["input_ids"], mlm_b["attention_mask"], mlm_b["segment_ids"], mlm_b["selected"]
         )
         mlm_targets = mlm_b["targets"][mlm_b["selected"]]
@@ -331,10 +329,7 @@ while time.time() - t_start_training < TIME_BUDGET:
             F.cross_entropy(lm_logits[lm_valid], lm_targets[lm_valid], reduction="sum") / n_lm
         )
 
-        nsp_logits = model.forward_nsp(
-            nsp_b["input_ids"], nsp_b["attention_mask"], nsp_b["segment_ids"]
-        )
-        nsp_loss = F.cross_entropy(nsp_logits, nsp_b["is_next"], reduction="sum") / n_nsp
+        nsp_loss = F.cross_entropy(nsp_logits, mlm_b["is_next"], reduction="sum") / n_nsp
 
         loss = MLM_LOSS_WEIGHT * mlm_loss + LM_LOSS_WEIGHT * lm_loss + NSP_LOSS_WEIGHT * nsp_loss
         if not torch.isfinite(loss):
