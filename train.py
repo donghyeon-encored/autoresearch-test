@@ -6,6 +6,7 @@ This is MLM-only pretraining from random initialization, without NSP or a pooler
 
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import asdict, dataclass
 
@@ -234,7 +235,10 @@ while time.time() - t_start_training < TIME_BUDGET:
     if WARMUP_RATIO > 0 and progress < WARMUP_RATIO:
         lr_multiplier = max(progress / WARMUP_RATIO, 1e-3)
     else:
-        lr_multiplier = max(0.0, (1.0 - progress) / max(1.0 - WARMUP_RATIO, 1e-8))
+        decay_progress = min(
+            (progress - WARMUP_RATIO) / max(1.0 - WARMUP_RATIO, 1e-8), 1.0
+        )
+        lr_multiplier = 0.5 * (1.0 + math.cos(math.pi * decay_progress))
     for group in optimizer.param_groups:
         group["lr"] = LEARNING_RATE * lr_multiplier
 
