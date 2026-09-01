@@ -167,7 +167,7 @@ GRAD_CLIP = 1.0
 # Batching
 DEVICE_BATCH_SIZE = 16
 GRAD_ACCUM_STEPS = 4
-MASK_RATE = 0.3
+MASK_RATE = 0.4
 
 # ---------------------------------------------------------------------------
 # Setup: data, model, optimizer, dataloader
