@@ -205,8 +205,8 @@ WARMUP_RATIO = 0.1
 GRAD_CLIP = 1.0
 
 # Batching
-DEVICE_BATCH_SIZE = 16
-GRAD_ACCUM_STEPS = 4
+DEVICE_BATCH_SIZE = 64
+GRAD_ACCUM_STEPS = 1
 MASK_RATE = 0.6
 
 # Multi-task training loss weights (train-time only; eval composite weights are fixed
