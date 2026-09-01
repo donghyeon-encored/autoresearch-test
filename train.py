@@ -191,7 +191,7 @@ THREADS = 4
 DEVICE = "auto"  # "auto", "cpu", "mps", or "cuda"
 
 # Model architecture
-DEPTH = 3
+DEPTH = 2
 HIDDEN_SIZE = 128
 NUM_HEADS = 4
 INTERMEDIATE_SIZE = 512
