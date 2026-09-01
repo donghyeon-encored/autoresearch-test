@@ -215,10 +215,6 @@ MLM_LOSS_WEIGHT = 1.0
 LM_LOSS_WEIGHT = 1.0
 NSP_LOSS_WEIGHT = 0.5
 
-# Mixed precision (forward+loss only; params/optimizer stay fp32). bf16 needs no loss
-# scaler and is numerically safer than fp16 for this.
-AMP_DTYPE = torch.bfloat16
-
 # ---------------------------------------------------------------------------
 # Setup: data, model, optimizer, dataloader
 # ---------------------------------------------------------------------------
@@ -320,27 +316,22 @@ while time.time() - t_start_training < TIME_BUDGET:
         mlm_b = {k: v.to(device) for k, v in mlm_b.items()}
         lm_b = {k: v.to(device) for k, v in lm_b.items()}
 
-        with torch.autocast(device_type=device, dtype=AMP_DTYPE, enabled=device != "cpu"):
-            mlm_logits, nsp_logits = model.forward_mlm_nsp(
-                mlm_b["input_ids"], mlm_b["attention_mask"], mlm_b["segment_ids"], mlm_b["selected"]
-            )
-            mlm_targets = mlm_b["targets"][mlm_b["selected"]]
-            mlm_loss = F.cross_entropy(mlm_logits, mlm_targets, reduction="sum") / n_mlm
+        mlm_logits, nsp_logits = model.forward_mlm_nsp(
+            mlm_b["input_ids"], mlm_b["attention_mask"], mlm_b["segment_ids"], mlm_b["selected"]
+        )
+        mlm_targets = mlm_b["targets"][mlm_b["selected"]]
+        mlm_loss = F.cross_entropy(mlm_logits, mlm_targets, reduction="sum") / n_mlm
 
-            lm_logits = model.forward_lm(
-                lm_b["input_ids"], lm_b["attention_mask"], lm_b["segment_ids"]
-            )
-            lm_targets = lm_b["input_ids"][:, 1:]
-            lm_valid = lm_b["attention_mask"][:, 1:]
-            lm_loss = (
-                F.cross_entropy(lm_logits[lm_valid], lm_targets[lm_valid], reduction="sum") / n_lm
-            )
+        lm_logits = model.forward_lm(lm_b["input_ids"], lm_b["attention_mask"], lm_b["segment_ids"])
+        lm_targets = lm_b["input_ids"][:, 1:]
+        lm_valid = lm_b["attention_mask"][:, 1:]
+        lm_loss = (
+            F.cross_entropy(lm_logits[lm_valid], lm_targets[lm_valid], reduction="sum") / n_lm
+        )
 
-            nsp_loss = F.cross_entropy(nsp_logits, mlm_b["is_next"], reduction="sum") / n_nsp
+        nsp_loss = F.cross_entropy(nsp_logits, mlm_b["is_next"], reduction="sum") / n_nsp
 
-            loss = (
-                MLM_LOSS_WEIGHT * mlm_loss + LM_LOSS_WEIGHT * lm_loss + NSP_LOSS_WEIGHT * nsp_loss
-            )
+        loss = MLM_LOSS_WEIGHT * mlm_loss + LM_LOSS_WEIGHT * lm_loss + NSP_LOSS_WEIGHT * nsp_loss
         if not torch.isfinite(loss):
             raise FloatingPointError("Non-finite training loss.")
         loss.backward()
