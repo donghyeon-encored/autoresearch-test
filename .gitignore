@@ -1,0 +1,11 @@
+.venv/
+.uv-cache/
+__pycache__/
+*.pyc
+.data/
+results.tsv
+.pytest_cache/
+.ruff_cache/
+run.log
+.DS_Store
+.claude/
