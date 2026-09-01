@@ -166,7 +166,7 @@ GRAD_CLIP = 1.0
 
 # Batching
 DEVICE_BATCH_SIZE = 16
-GRAD_ACCUM_STEPS = 4
+GRAD_ACCUM_STEPS = 2
 MASK_RATE = 0.15
 
 # ---------------------------------------------------------------------------
