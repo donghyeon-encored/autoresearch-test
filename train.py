@@ -194,7 +194,7 @@ DEVICE = "auto"  # "auto", "cpu", "mps", or "cuda"
 DEPTH = 2
 HIDDEN_SIZE = 128
 NUM_HEADS = 4
-INTERMEDIATE_SIZE = 256
+INTERMEDIATE_SIZE = 512
 DROPOUT = 0.1
 
 # Optimization
