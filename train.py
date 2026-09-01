@@ -152,9 +152,9 @@ DEVICE = "auto"  # "auto", "cpu", "mps", or "cuda"
 
 # Model architecture
 DEPTH = 2
-HIDDEN_SIZE = 128
+HIDDEN_SIZE = 192
 NUM_HEADS = 4
-INTERMEDIATE_SIZE = 512
+INTERMEDIATE_SIZE = 768
 DROPOUT = 0.1
 
 # Optimization
