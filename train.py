@@ -211,7 +211,7 @@ MASK_RATE = 0.6
 
 # Multi-task training loss weights (train-time only; eval composite weights are fixed
 # in prepare.py and cannot be changed here).
-MLM_LOSS_WEIGHT = 1.5
+MLM_LOSS_WEIGHT = 1.0
 LM_LOSS_WEIGHT = 1.0
 NSP_LOSS_WEIGHT = 0.5
 
