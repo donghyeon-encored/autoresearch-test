@@ -180,6 +180,24 @@ class TinyMultiTaskBert(nn.Module):
         x = self._encode(input_ids, self._bidirectional_mask(attention_mask), segment_ids)
         return self._lm_head(x[selected]), self.nsp_head(x[:, 0])
 
+    def forward_all(self, lm_ids, lm_mask, mlm_ids, mlm_mask, segment_ids, selected):
+        """Training-only fusion: one combined-batch encode() call does the causal LM pass
+        and the bidirectional MLM+NSP pass together (concatenated along batch), instead of
+        two separate full trunk traversals -- halves the number of layer forward/backward
+        dispatches per optimizer step."""
+        batch = lm_ids.shape[0]
+        combined_ids = torch.cat([lm_ids, mlm_ids], dim=0)
+        combined_segment_ids = torch.cat([segment_ids, segment_ids], dim=0)
+        causal = self._causal_mask(lm_mask)
+        bidi = self._bidirectional_mask(mlm_mask).expand(-1, -1, mlm_mask.shape[1], -1)
+        combined_mask = torch.cat([causal, bidi], dim=0)
+        x = self._encode(combined_ids, combined_mask, combined_segment_ids)
+        x_lm, x_mlm = x[:batch], x[batch:]
+        lm_logits = self._lm_head(x_lm[:, :-1])
+        mlm_logits = self._lm_head(x_mlm[selected])
+        nsp_logits = self.nsp_head(x_mlm[:, 0])
+        return lm_logits, mlm_logits, nsp_logits
+
 
 # ---------------------------------------------------------------------------
 # Hyperparameters (edit these directly, no CLI flags needed)
@@ -316,13 +334,17 @@ while time.time() - t_start_training < TIME_BUDGET:
         mlm_b = {k: v.to(device) for k, v in mlm_b.items()}
         lm_b = {k: v.to(device) for k, v in lm_b.items()}
 
-        mlm_logits, nsp_logits = model.forward_mlm_nsp(
-            mlm_b["input_ids"], mlm_b["attention_mask"], mlm_b["segment_ids"], mlm_b["selected"]
+        lm_logits, mlm_logits, nsp_logits = model.forward_all(
+            lm_b["input_ids"],
+            lm_b["attention_mask"],
+            mlm_b["input_ids"],
+            mlm_b["attention_mask"],
+            mlm_b["segment_ids"],
+            mlm_b["selected"],
         )
         mlm_targets = mlm_b["targets"][mlm_b["selected"]]
         mlm_loss = F.cross_entropy(mlm_logits, mlm_targets, reduction="sum") / n_mlm
 
-        lm_logits = model.forward_lm(lm_b["input_ids"], lm_b["attention_mask"], lm_b["segment_ids"])
         lm_targets = lm_b["input_ids"][:, 1:]
         lm_valid = lm_b["attention_mask"][:, 1:]
         lm_loss = (
